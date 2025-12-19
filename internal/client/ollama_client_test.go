@@ -5,20 +5,26 @@ import (
 	"testing"
 )
 
-func TestCreateOllamaClient(t *testing.T) {
-	client, err := CreateOllamaClient()
+const testModel = "llama3.2"
 
-	if client == nil || err != nil {
+func TestNewOllamaClient(t *testing.T) {
+	client, err := NewOllamaClient(testModel)
+
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+
+	if client == nil {
 		t.Fatal("Expected client to be non-nil")
 	}
 
-	err = VerifyConnection(client)
+	err = client.VerifyConnection()
 	if err != nil {
 		t.Fatalf("Failed to verify connection: %v", err)
 	}
 }
 
-func TestCreateOllamaClientWithCustomHost(t *testing.T) {
+func TestNewOllamaClientWithCustomHost(t *testing.T) {
 	originalHost := os.Getenv("OLLAMA_HOST")
 	defer func() {
 		if originalHost != "" {
@@ -29,29 +35,38 @@ func TestCreateOllamaClientWithCustomHost(t *testing.T) {
 	}()
 
 	os.Setenv("OLLAMA_HOST", "http://localhost:11434")
-	client, err := CreateOllamaClient()
+	client, err := NewOllamaClient(testModel)
 
-	if client == nil || err != nil {
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+
+	if client == nil {
 		t.Fatal("Expected client to be non-nil")
 	}
 
-	err = VerifyConnection(client)
+	err = client.VerifyConnection()
 	if err != nil {
 		t.Fatalf("Failed to verify connection: %v", err)
 	}
 }
 
-func TestCreateOllamaClientWithWrongHost(t *testing.T) {
+func TestNewOllamaClientWithWrongHost(t *testing.T) {
 	os.Setenv("OLLAMA_HOST", "http://localhost:999999")
 	defer os.Unsetenv("OLLAMA_HOST")
 
-	client, err := CreateOllamaClient()
+	client, err := NewOllamaClient(testModel)
 
-	if client == nil || err != nil {
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+
+	if client == nil {
 		t.Fatal("Expected client to be non-nil")
 	}
 
-	err = VerifyConnection(client)
+	// 실제 연결 테스트 - 잘못된 호스트이므로 에러가 예상됨
+	err = client.VerifyConnection()
 	if err == nil {
 		t.Fatal("Expected error when connecting to invalid host, but got none")
 	}
