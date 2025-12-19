@@ -1,12 +1,12 @@
-package agent
+package client
 
 import (
 	"os"
 	"testing"
 )
 
-func TestCreateAgent(t *testing.T) {
-	client, err := CreateAgent()
+func TestCreateOllamaClient(t *testing.T) {
+	client, err := CreateOllamaClient()
 
 	if client == nil || err != nil {
 		t.Fatal("Expected client to be non-nil")
@@ -18,7 +18,7 @@ func TestCreateAgent(t *testing.T) {
 	}
 }
 
-func TestCreateAgentWithCustomHost(t *testing.T) {
+func TestCreateOllamaClientWithCustomHost(t *testing.T) {
 	originalHost := os.Getenv("OLLAMA_HOST")
 	defer func() {
 		if originalHost != "" {
@@ -29,7 +29,7 @@ func TestCreateAgentWithCustomHost(t *testing.T) {
 	}()
 
 	os.Setenv("OLLAMA_HOST", "http://localhost:11434")
-	client, err := CreateAgent()
+	client, err := CreateOllamaClient()
 
 	if client == nil || err != nil {
 		t.Fatal("Expected client to be non-nil")
@@ -41,11 +41,11 @@ func TestCreateAgentWithCustomHost(t *testing.T) {
 	}
 }
 
-func TestCreateAgentWithWrongHost(t *testing.T) {
+func TestCreateOllamaClientWithWrongHost(t *testing.T) {
 	os.Setenv("OLLAMA_HOST", "http://localhost:999999")
 	defer os.Unsetenv("OLLAMA_HOST")
 
-	client, err := CreateAgent()
+	client, err := CreateOllamaClient()
 
 	if client == nil || err != nil {
 		t.Fatal("Expected client to be non-nil")

@@ -1,4 +1,4 @@
-package agent
+package client
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"github.com/ollama/ollama/api"
 )
 
-func CreateAgent() (*api.Client, error) {
+func CreateOllamaClient() (*api.Client, error) {
 	client, err := api.ClientFromEnvironment()
 	if err != nil {
 		return nil, err
