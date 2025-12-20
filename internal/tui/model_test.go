@@ -26,6 +26,10 @@ func (m *MockRepo) GetErrorStats(ctx context.Context) (*repository.ErrorStats, e
 	return &repository.ErrorStats{CategoryCount: make(map[string]int)}, nil
 }
 
+func (m *MockRepo) GetCorrectionPairs(ctx context.Context, limit int) ([]repository.CorrectionPair, error) {
+	return []repository.CorrectionPair{}, nil
+}
+
 type MockLLMClient struct {
 	generateStreamFunc func(ctx context.Context, req *agent.GenerateRequest, fn func(*agent.GenerateResponse) error) error
 }

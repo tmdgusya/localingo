@@ -20,6 +20,7 @@ type MockChatHistoryRepository struct {
 	WithTxFunc                    func(ctx context.Context, fn func(repo ChatHistoryRepository) error) error
 	PingFunc                      func(ctx context.Context) error
 	GetErrorStatsFunc             func(ctx context.Context) (*ErrorStats, error)
+	GetCorrectionPairsFunc        func(ctx context.Context, limit int) ([]CorrectionPair, error)
 }
 
 // CreateConversation mocks conversation creation
@@ -116,4 +117,12 @@ func (m *MockChatHistoryRepository) GetErrorStats(ctx context.Context) (*ErrorSt
 		return m.GetErrorStatsFunc(ctx)
 	}
 	return &ErrorStats{CategoryCount: make(map[string]int)}, nil
+}
+
+// GetCorrectionPairs mocks getting correction pairs
+func (m *MockChatHistoryRepository) GetCorrectionPairs(ctx context.Context, limit int) ([]CorrectionPair, error) {
+	if m.GetCorrectionPairsFunc != nil {
+		return m.GetCorrectionPairsFunc(ctx, limit)
+	}
+	return []CorrectionPair{}, nil
 }

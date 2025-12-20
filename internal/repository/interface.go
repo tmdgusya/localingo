@@ -30,6 +30,14 @@ type ChatHistoryRepository interface {
 
 	// Analysis operations
 	GetErrorStats(ctx context.Context) (*ErrorStats, error)
+	GetCorrectionPairs(ctx context.Context, limit int) ([]CorrectionPair, error)
+}
+
+// CorrectionPair represents a user input and its correction
+type CorrectionPair struct {
+	Original  string
+	Corrected string
+	Analysis  []byte
 }
 
 // ErrorStats holds aggregated statistics about user errors

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/tmdgusya/localingo/internal/prompt"
 )
@@ -95,4 +96,29 @@ func (a *PhraseSenseiAgent) RephraseStream(ctx context.Context, req *GenerateReq
 	}
 	
 	return fn(resp)
+}
+
+// GenerateLesson analyzes past logs and generates a personalized lesson.
+func (a *PhraseSenseiAgent) GenerateLesson(ctx context.Context, model string, logs []CorrectionLog) (*GenerateResponse, error) {
+	// 1. Format logs for the prompt
+	var sb strings.Builder
+	for _, l := range logs {
+		sb.WriteString(fmt.Sprintf("[Original]: %s\n[Corrected]: %s\n[Reason]: %s\n\n", l.Original, l.Corrected, l.Reason))
+	}
+
+	// 2. Execute template
+	promptText, err := a.promptManager.Execute("teacher_lesson", map[string]string{
+		"Logs": sb.String(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Call LLM
+	llmReq := &GenerateRequest{
+		Model:  model,
+		Prompt: promptText,
+	}
+
+	return a.client.Generate(ctx, llmReq)
 }

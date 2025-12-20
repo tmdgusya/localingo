@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/tmdgusya/localingo/internal/tui/components/chatview"
 	"github.com/tmdgusya/localingo/internal/tui/components/history"
 	"github.com/tmdgusya/localingo/internal/tui/components/input"
+	"github.com/tmdgusya/localingo/internal/tui/components/lesson"
 	"github.com/tmdgusya/localingo/internal/tui/components/report"
 	"github.com/tmdgusya/localingo/internal/tui/style"
 )
@@ -25,6 +27,7 @@ const (
 	ViewChat ViewState = iota
 	ViewHistory
 	ViewReport
+	ViewLesson
 )
 
 type TuiModel struct {
@@ -41,6 +44,7 @@ type TuiModel struct {
 	chatView    chatview.Model
 	historyView history.Model
 	reportView  report.Model
+	lessonView  lesson.Model
 
 	// Layout
 	width  int
@@ -58,6 +62,7 @@ func NewModel(a *agent.PhraseSenseiAgent, r repository.ChatHistoryRepository, de
 		chatView:     chatview.New(),
 		historyView:  history.New(r),
 		reportView:   report.New(r),
+		lessonView:   lesson.New(),
 	}
 }
 
@@ -67,6 +72,7 @@ func (m *TuiModel) Init() tea.Cmd {
 		m.chatView.Init(),
 		m.historyView.Init(),
 		m.reportView.Init(),
+		m.lessonView.Init(),
 	)
 }
 
@@ -83,7 +89,7 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		// We can add Esc to go back from History to Chat if needed
 		case tea.KeyEsc:
-			if m.viewState == ViewHistory || m.viewState == ViewReport {
+			if m.viewState == ViewHistory || m.viewState == ViewReport || m.viewState == ViewLesson {
 				m.viewState = ViewChat
 				return m, nil
 			}
@@ -99,7 +105,8 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Propagate to all views to ensure they are ready
 		_, hCmd := m.historyView.Update(msg)
 		_, rCmd := m.reportView.Update(msg)
-		cmds = append(cmds, hCmd, rCmd)
+		_, lCmd := m.lessonView.Update(msg)
+		cmds = append(cmds, hCmd, rCmd, lCmd)
 
 	// --- Command & Input Handling ---
 	case input.SendRequestedMsg:
@@ -136,6 +143,11 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, msg := range msg.messages {
 			m.chatView.AddMessage(string(msg.Role), msg.Content)
 		}
+		return m, nil
+
+	case lessonLoadedMsg:
+		log.Println("Personalized lesson generated")
+		m.lessonView.SetContent(msg.content)
 		return m, nil
 
 	// --- Agent Response Handling ---
@@ -187,6 +199,12 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		rModel, cmd = m.reportView.Update(msg)
 		m.reportView = rModel.(report.Model)
 		cmds = append(cmds, cmd)
+
+	case ViewLesson:
+		var lModel tea.Model
+		lModel, cmd = m.lessonView.Update(msg)
+		m.lessonView = lModel.(lesson.Model)
+		cmds = append(cmds, cmd)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -202,6 +220,8 @@ func (m *TuiModel) View() string {
 		return m.historyView.View()
 	case ViewReport:
 		return m.reportView.View()
+	case ViewLesson:
+		return m.lessonView.View()
 	default:
 		return lipgloss.JoinVertical(
 			lipgloss.Left,
@@ -223,6 +243,9 @@ func (m *TuiModel) layout(width, height int) {
 	// Update History Layout
 	m.historyView.SetSize(width, height)
 
+	// Update Lesson Layout
+	m.lessonView.SetDimensions(width, height)
+
 	// Update Report Layout
 	// Handled via propagation or explicit set
 }
@@ -238,6 +261,10 @@ func (m *TuiModel) handleCommand(text string) tea.Cmd {
 	case "/report":
 		m.viewState = ViewReport
 		return m.reportView.LoadStats()
+	case "/lesson":
+		m.viewState = ViewLesson
+		m.lessonView.SetLoading(true)
+		return m.generateLessonCmd()
 	case "/new":
 		m.conversationID = uuid.Nil
 		m.chatView.Clear() // Need to implement Clear
@@ -304,6 +331,10 @@ type messagesLoadedMsg struct {
 	messages []*repository.Message
 }
 
+type lessonLoadedMsg struct {
+	content string
+}
+
 func (m *TuiModel) loadConversationMessages(id uuid.UUID) tea.Cmd {
 	return func() tea.Msg {
 		if m.repo == nil {
@@ -315,6 +346,46 @@ func (m *TuiModel) loadConversationMessages(id uuid.UUID) tea.Cmd {
 			return errorMsg{err}
 		}
 		return messagesLoadedMsg{messages: msgs}
+	}
+}
+
+func (m *TuiModel) generateLessonCmd() tea.Cmd {
+	return func() tea.Msg {
+		if m.repo == nil {
+			return nil
+		}
+		ctx := context.Background()
+		
+		// 1. Fetch correction pairs
+		pairs, err := m.repo.GetCorrectionPairs(ctx, 20)
+		if err != nil {
+			return errorMsg{err}
+		}
+
+		if len(pairs) == 0 {
+			return lessonLoadedMsg{content: "Not enough data yet. Keep chatting to generate your first lesson!"}
+		}
+
+		// 2. Convert to agent format
+		var logs []agent.CorrectionLog
+		for _, p := range pairs {
+			var analysis agent.Analysis
+			_ = json.Unmarshal(p.Analysis, &analysis)
+			
+			logs = append(logs, agent.CorrectionLog{
+				Original:  p.Original,
+				Corrected: p.Corrected,
+				Reason:    analysis.Explanation,
+			})
+		}
+
+		// 3. Generate Lesson
+		resp, err := m.agent.GenerateLesson(ctx, m.defaultModel, logs)
+		if err != nil {
+			return errorMsg{err}
+		}
+
+		return lessonLoadedMsg{content: resp.Text}
 	}
 }
 

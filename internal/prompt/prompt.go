@@ -28,6 +28,11 @@ func NewManager() (*Manager, error) {
 		return nil, err
 	}
 
+	// Load teacher lesson template
+	if err := m.loadTemplate("teacher_lesson", "templates/teacher_lesson.txt"); err != nil {
+		return nil, err
+	}
+
 	return m, nil
 }
 

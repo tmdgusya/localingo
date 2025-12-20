@@ -56,3 +56,10 @@ func ParseStructuredResponse(text string) *GenerateResponse {
 		Analysis: &structResp.Analysis,
 	}
 }
+
+// CorrectionLog represents a past correction for analysis
+type CorrectionLog struct {
+	Original  string
+	Corrected string
+	Reason    string
+}

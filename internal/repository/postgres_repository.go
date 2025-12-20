@@ -296,6 +296,51 @@ func (r *PostgresRepository) GetErrorStats(ctx context.Context) (*ErrorStats, er
 	return stats, nil
 }
 
+// GetCorrectionPairs retrieves pairs of user message and its corresponding assistant correction
+func (r *PostgresRepository) GetCorrectionPairs(ctx context.Context, limit int) ([]CorrectionPair, error) {
+	query := `
+		WITH assistant_msgs AS (
+			SELECT id, conversation_id, created_at, content, metadata
+			FROM messages
+			WHERE role = 'assistant' AND metadata->'analysis' IS NOT NULL
+		),
+		user_msgs AS (
+			SELECT id, conversation_id, created_at, content
+			FROM messages
+			WHERE role = 'user'
+		)
+		SELECT 
+			u.content as original,
+			a.content as corrected,
+			a.metadata->'analysis' as analysis
+		FROM assistant_msgs a
+		JOIN LATERAL (
+			SELECT content FROM user_msgs u 
+			WHERE u.conversation_id = a.conversation_id 
+			AND u.created_at < a.created_at 
+			ORDER BY u.created_at DESC LIMIT 1
+		) u ON true
+		ORDER BY a.created_at DESC
+		LIMIT $1`
+
+	rows, err := r.pool.Query(ctx, query, limit)
+	if err != nil {
+		return nil, WrapDBError(err)
+	}
+	defer rows.Close()
+
+	var pairs []CorrectionPair
+	for rows.Next() {
+		var p CorrectionPair
+		if err := rows.Scan(&p.Original, &p.Corrected, &p.Analysis); err != nil {
+			return nil, WrapDBError(err)
+		}
+		pairs = append(pairs, p)
+	}
+
+	return pairs, nil
+}
+
 // Helper functions to convert between DB and domain types
 
 func (r *PostgresRepository) convertDBConversationToDomain(dbConv db.Conversation) (*Conversation, error) {

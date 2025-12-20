@@ -59,3 +59,28 @@ FROM
 WHERE 
     role = 'assistant' 
     AND metadata->'analysis' IS NOT NULL;
+
+-- name: GetCorrectionPairs :many
+WITH assistant_msgs AS (
+    SELECT id, conversation_id, created_at, content, metadata
+    FROM messages
+    WHERE role = 'assistant' AND metadata->'analysis' IS NOT NULL
+),
+user_msgs AS (
+    SELECT id, conversation_id, created_at, content
+    FROM messages
+    WHERE role = 'user'
+)
+SELECT 
+    u.content as original,
+    a.content as corrected,
+    a.metadata->'analysis' as analysis
+FROM assistant_msgs a
+JOIN LATERAL (
+    SELECT content FROM user_msgs u 
+    WHERE u.conversation_id = a.conversation_id 
+    AND u.created_at < a.created_at 
+    ORDER BY u.created_at DESC LIMIT 1
+) u ON true
+ORDER BY a.created_at DESC
+LIMIT $1;
