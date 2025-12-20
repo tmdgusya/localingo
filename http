@@ -1,0 +1,28 @@
+curl -X POST http://localhost:3000/api/rephrase/stream \
+    -H "Content-Type: application/json" \
+    -d '{"model": "qwen3:4b", "prompt": "test"}'
+
+ Basic request (auto-creates conversation):
+  curl -X POST http://localhost:3000/api/rephrase/stream \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "qwen3:4b",
+      "prompt": "Rephrase this text"
+    }'
+
+  curl -X POST http://localhost:3000/api/rephrase/stream \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "qwen3:4b",
+      "prompt": "Follow-up question",
+      "conversation_id": "uuid-from-first-request"
+    }'
+
+  Disable history for specific request:
+  curl -X POST http://localhost:3000/api/rephrase/stream \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "qwen3:4b",
+      "prompt": "Don't save this",
+      "save_history": false
+    }'
