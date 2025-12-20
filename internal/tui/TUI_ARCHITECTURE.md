@@ -18,7 +18,8 @@ internal/tui/
 ├── style/          # Centralized Lipgloss styles (Theming)
 ├── components/     # Reusable UI components
 │   ├── input/      # User input handling
-│   └── chatview/   # Message history display
+│   ├── chatview/   # Message history display
+│   └── history/    # (New) Conversation history list
 ├── screens/        # Full-page compositions (optional for now, can stay in root)
 ├── model.go        # Main entry point orchestration
 └── msg.go          # Global message types
@@ -55,44 +56,47 @@ func (m Model) View() string { ... }
 ## 4. Specific Component Designs
 
 ### A. Style Package (`internal/tui/style`)
-*   **Responsibility:** Export `lipgloss.Style` definitions for borders, active colors, text colors, and layout utilities.
-*   **Goal:** Changing a color here updates the entire app.
+*   **Responsibility:** Export `lipgloss.Style` definitions.
 
 ### B. ChatInput Component (`internal/tui/components/input`)
-*   **Wraps:** `github.com/charmbracelet/bubbles/textinput`
-*   **Responsibility:**
-    *   Manage focus state.
-    *   Handle "Enter" key to emit a `SendMsg`.
-    *   Styling the prompt and input box.
-*   **Events:** Returns a custom `SendRequestedMsg` when Enter is pressed, so the parent knows to process text.
+*   **Responsibility:** Manage focus, Handle "Enter".
+*   **Events:** Returns `SendRequestedMsg`.
 
 ### C. ChatViewport Component (`internal/tui/components/chatview`)
-*   **Wraps:** `github.com/charmbracelet/bubbles/viewport`
-*   **Responsibility:**
-    *   Rendering a list of messages.
-    *   Distinguishing between `User` (Right aligned, Blue) and `Sensei` (Left aligned, Green) messages.
-    *   Auto-scrolling to bottom on new messages.
+*   **Responsibility:** Render messages, Auto-scroll.
 *   **Inputs:** `AddMessage(role, text)` method.
 
-## 5. Main Model Composition
+### D. History Component (`internal/tui/components/history`) **(New)**
+*   **Wraps:** `github.com/charmbracelet/bubbles/list`
+*   **Responsibility:**
+    *   Fetch and display a list of past conversations.
+    *   Allow navigation (Up/Down) and Selection (Enter).
+    *   Filtering (built-in by bubbles/list).
+*   **Events:** Returns `ConversationSelectedMsg{ID: uuid.UUID}`.
 
-The root model (`internal/tui/model.go`) will no longer handle low-level rendering. It will coordinate:
+## 5. Main Model Composition & Command System
 
-```go
-type MainModel struct {
-    chatView  chatview.Model
-    chatInput input.Model
-    agent     Agent
-}
+The `MainModel` acts as the Router/Controller.
 
-func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-    switch msg := msg.(type) {
-    case input.SendRequestedMsg:
-        // 1. Get text from input
-        // 2. Add to chatView
-        // 3. Trigger Agent
-    }
-    // Propagate standard messages to children
-    // ...
-}
-```
+### State Management
+*   `viewState`: Enum (`ViewChat`, `ViewHistory`)
+*   `currentConversationID`: `uuid.UUID` (Tracks active session)
+
+### Command Handling
+The `MainModel` intercepts `SendRequestedMsg` from `ChatInput`.
+
+1.  **Command Detection:** If text starts with `/`, parse it.
+    *   `/history`: Switch `viewState` to `ViewHistory`, trigger `repo.ListConversations`.
+    *   `/new`: Clear `ChatView`, reset `currentConversationID`.
+    *   `/quit`: Exit.
+2.  **Regular Chat:**
+    *   If `currentConversationID` is nil, create a new conversation first (or lazy create).
+    *   Append to `ChatView`.
+    *   Call Agent.
+
+### Flow
+1.  **User types `/history`** -> `MainModel` hides `ChatView`/`Input`, shows `HistoryView`, calls `Cmd` to fetch data.
+2.  **Data Loaded** -> `HistoryView` updates items.
+3.  **User selects item** -> `MainModel` receives `ConversationSelectedMsg`.
+4.  **Transition** -> `MainModel` switches to `ViewChat`, calls `Cmd` to fetch messages for that ID.
+5.  **Messages Loaded** -> `ChatView` is populated.

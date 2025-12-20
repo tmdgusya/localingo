@@ -65,6 +65,14 @@ func (m *Model) AddMessage(role, content string) {
 	}
 }
 
+// Clear clears the chat history
+func (m *Model) Clear() {
+	m.messages = []string{}
+	if m.ready {
+		m.viewport.SetContent("")
+	}
+}
+
 // AppendToLastMessage appends text to the last message (useful for streaming)
 func (m *Model) AppendToLastMessage(text string) {
 	if len(m.messages) == 0 {
