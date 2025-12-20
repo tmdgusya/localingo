@@ -55,9 +55,13 @@ func (o *OllamaClient) GenerateStream(ctx context.Context, req *GenerateRequest,
 	}
 
 	return o.client.Generate(ctx, ollamaReq, func(resp api.GenerateResponse) error {
-		return fn(&GenerateResponse{
-			Text: resp.Response,
-			Done: resp.Done,
-		})
+		// Only send non-empty responses
+		if resp.Response != "" || resp.Done {
+			return fn(&GenerateResponse{
+				Text: resp.Response,
+				Done: resp.Done,
+			})
+		}
+		return nil
 	})
 }
