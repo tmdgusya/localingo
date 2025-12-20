@@ -67,7 +67,7 @@ func main() {
 		AllowOrigin:        "*",
 		AllowCredentials:   false,
 		StreamTimeout:      5 * time.Minute,
-		DefaultModel:       "llama3.2:latest",
+		DefaultModel:       cfg.Ollama.DefaultModel,
 		Debug:              false,
 		ChatHistoryEnabled: cfg.ChatHistory.Enabled,
 		ChatHistoryRepo:    chatRepo,

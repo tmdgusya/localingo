@@ -25,10 +25,15 @@ test-short:
 .PHONY: build
 build:
 	go build -o bin/localingo ./main.go
+	go build -o bin/tui ./cmd/tui/main.go
 
 .PHONY: run
 run:
 	go run main.go
+
+.PHONY: tui
+tui:
+	go run cmd/tui/main.go
 
 .PHONY: clean
 clean:
@@ -44,6 +49,7 @@ help:
 	@echo "  docker-logs    - Show PostgreSQL logs"
 	@echo "  test           - Run all tests"
 	@echo "  test-short     - Run tests excluding long-running ones"
-	@echo "  build          - Build the application"
-	@echo "  run            - Run the application"
+	@echo "  build          - Build the application (Server & TUI)"
+	@echo "  run            - Run the API server"
+	@echo "  tui            - Run the terminal UI"
 	@echo "  clean          - Clean build artifacts and Docker containers"

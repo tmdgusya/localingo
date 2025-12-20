@@ -10,6 +10,7 @@ import (
 type Config struct {
 	Database    DatabaseConfig
 	ChatHistory ChatHistoryConfig
+	Ollama      OllamaConfig
 }
 
 // DatabaseConfig holds database configuration
@@ -26,6 +27,12 @@ type ChatHistoryConfig struct {
 	AutoSave bool
 }
 
+// OllamaConfig holds Ollama configuration
+type OllamaConfig struct {
+	Host         string
+	DefaultModel string
+}
+
 // LoadFromEnv loads configuration from environment variables
 func LoadFromEnv() *Config {
 	return &Config{
@@ -38,6 +45,10 @@ func LoadFromEnv() *Config {
 		ChatHistory: ChatHistoryConfig{
 			Enabled:  getEnvBool("CHAT_HISTORY_ENABLED", true),
 			AutoSave: getEnvBool("CHAT_HISTORY_AUTO_SAVE", true),
+		},
+		Ollama: OllamaConfig{
+			Host:         getEnv("OLLAMA_HOST", "http://localhost:11434"),
+			DefaultModel: getEnv("OLLAMA_MODEL", "qwen3:4b"),
 		},
 	}
 }
