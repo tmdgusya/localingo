@@ -13,6 +13,7 @@ import (
 	"github.com/tmdgusya/localingo/internal/agent"
 	"github.com/tmdgusya/localingo/internal/repository"
 	"github.com/tmdgusya/localingo/internal/tui/components/chatview"
+	"github.com/tmdgusya/localingo/internal/tui/components/helper"
 	"github.com/tmdgusya/localingo/internal/tui/components/history"
 	"github.com/tmdgusya/localingo/internal/tui/components/input"
 	"github.com/tmdgusya/localingo/internal/tui/components/lesson"
@@ -45,6 +46,7 @@ type TuiModel struct {
 	historyView history.Model
 	reportView  report.Model
 	lessonView  lesson.Model
+	helperView  helper.Model
 
 	// Layout
 	width  int
@@ -63,6 +65,7 @@ func NewModel(a *agent.PhraseSenseiAgent, r repository.ChatHistoryRepository, de
 		historyView:  history.New(r),
 		reportView:   report.New(r),
 		lessonView:   lesson.New(),
+		helperView:   helper.New(),
 	}
 }
 
@@ -73,6 +76,7 @@ func (m *TuiModel) Init() tea.Cmd {
 		m.historyView.Init(),
 		m.reportView.Init(),
 		m.lessonView.Init(),
+		m.helperView.Init(),
 	)
 }
 
@@ -106,7 +110,8 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		_, hCmd := m.historyView.Update(msg)
 		_, rCmd := m.reportView.Update(msg)
 		_, lCmd := m.lessonView.Update(msg)
-		cmds = append(cmds, hCmd, rCmd, lCmd)
+		_, hlpCmd := m.helperView.Update(msg)
+		cmds = append(cmds, hCmd, rCmd, lCmd, hlpCmd)
 
 	// --- Command & Input Handling ---
 	case input.SendRequestedMsg:
@@ -183,9 +188,17 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.chatInput = ciModel.(input.Model)
 		cmds = append(cmds, cmd)
 
+		// Update helper filter based on current input
+		m.helperView.SetFilter(m.chatInput.Value())
+
 		var cvModel tea.Model
 		cvModel, cmd = m.chatView.Update(msg)
 		m.chatView = cvModel.(chatview.Model)
+		cmds = append(cmds, cmd)
+
+		var hlpModel tea.Model
+		hlpModel, cmd = m.helperView.Update(msg)
+		m.helperView = hlpModel.(helper.Model)
 		cmds = append(cmds, cmd)
 
 	case ViewHistory:
@@ -226,6 +239,7 @@ func (m *TuiModel) View() string {
 		return lipgloss.JoinVertical(
 			lipgloss.Left,
 			m.chatView.View(),
+			m.helperView.View(),
 			m.chatInput.View(),
 		)
 	}
@@ -235,8 +249,9 @@ func (m *TuiModel) View() string {
 
 func (m *TuiModel) layout(width, height int) {
 	// Update Chat Layout
+	helperHeight := 2
 	inputHeight := 3
-	chatHeight := height - inputHeight
+	chatHeight := height - inputHeight - helperHeight
 	m.chatView.SetDimensions(width, chatHeight)
 	m.chatInput.SetWidth(width)
 
