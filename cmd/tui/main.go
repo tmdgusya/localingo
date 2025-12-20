@@ -14,6 +14,7 @@ import (
 	"github.com/ollama/ollama/api"
 	"github.com/tmdgusya/localingo/internal/agent"
 	"github.com/tmdgusya/localingo/internal/config"
+	"github.com/tmdgusya/localingo/internal/prompt"
 	"github.com/tmdgusya/localingo/internal/repository"
 	"github.com/tmdgusya/localingo/internal/tui"
 )
@@ -58,8 +59,22 @@ func main() {
 	ollamaAPIClient := api.NewClient(ollamaURL, http.DefaultClient)
 	ollamaClient := agent.NewOllamaClient(ollamaAPIClient)
 
+	// Initialize Prompt Manager
+	promptManager, err := prompt.NewManager()
+	if err != nil {
+		log.Fatalf("Failed to initialize prompt manager: %v", err)
+	}
+
 	// Initialize agent
-	phraseSenseiAgent := agent.NewPhraseSenseiAgent(ollamaClient)
+	phraseSenseiAgent := agent.NewPhraseSenseiAgent(ollamaClient, promptManager)
+
+	// Enable logging to file
+	if f, err := tea.LogToFile("debug.log", "debug"); err != nil {
+		fmt.Println("fatal:", err)
+		os.Exit(1)
+	} else {
+		defer f.Close()
+	}
 
 	// Initialize TUI
 	p := tea.NewProgram(

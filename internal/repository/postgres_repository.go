@@ -241,6 +241,61 @@ func (r *PostgresRepository) Ping(ctx context.Context) error {
 	return WrapDBError(r.pool.Ping(ctx))
 }
 
+// GetErrorStats aggregates error statistics from all messages
+func (r *PostgresRepository) GetErrorStats(ctx context.Context) (*ErrorStats, error) {
+	stats := &ErrorStats{
+		CategoryCount: make(map[string]int),
+	}
+
+	// 1. Get category counts
+	categoryQuery := `
+		SELECT 
+			category, 
+			count(*)::int as count
+		FROM 
+			messages, 
+			jsonb_array_elements_text(metadata->'analysis'->'categories') as category
+		WHERE 
+			role = 'assistant' 
+			AND metadata->'analysis' IS NOT NULL
+		GROUP BY 
+			category
+		ORDER BY 
+			count DESC`
+
+	rows, err := r.pool.Query(ctx, categoryQuery)
+	if err != nil {
+		return nil, WrapDBError(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var category string
+		var count int
+		if err := rows.Scan(&category, &count); err != nil {
+			return nil, WrapDBError(err)
+		}
+		stats.CategoryCount[category] = count
+	}
+
+	// 2. Get total analyzed messages
+	totalQuery := `
+		SELECT 
+			count(*)::int
+		FROM 
+			messages
+		WHERE 
+			role = 'assistant' 
+			AND metadata->'analysis' IS NOT NULL`
+
+	err = r.pool.QueryRow(ctx, totalQuery).Scan(&stats.TotalAnalyzed)
+	if err != nil {
+		return nil, WrapDBError(err)
+	}
+
+	return stats, nil
+}
+
 // Helper functions to convert between DB and domain types
 
 func (r *PostgresRepository) convertDBConversationToDomain(dbConv db.Conversation) (*Conversation, error) {

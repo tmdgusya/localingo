@@ -146,11 +146,14 @@ func (h *PhraseSenseiRouter) HandleRephraseStream(w http.ResponseWriter, r *http
 
 	// Accumulate response for saving
 	var responseBuilder strings.Builder
+	var lastAnalysis *agent.Analysis // Store analysis data
 	startTime := time.Now()
 
 	go func() {
 		defer close(doneChan)
 
+		// Use RephraseStream which now wraps RephraseAndAnalyze internally
+		// The callback will be called ONCE with the full response since we switched to non-streaming logic for Analysis
 		err := h.agent.RephraseStream(ctx, agentReq, func(resp *agent.GenerateResponse) error {
 			// Check if context is cancelled
 			select {
@@ -158,6 +161,11 @@ func (h *PhraseSenseiRouter) HandleRephraseStream(w http.ResponseWriter, r *http
 				h.logInfo("Stream cancelled by context (client disconnected or timeout)")
 				return ctx.Err()
 			default:
+			}
+
+			// Capture analysis data if present
+			if resp.Analysis != nil {
+				lastAnalysis = resp.Analysis
 			}
 
 			// Accumulate response text
@@ -210,7 +218,14 @@ func (h *PhraseSenseiRouter) HandleRephraseStream(w http.ResponseWriter, r *http
 		// Save assistant message if history is enabled
 		if shouldSaveHistory && responseBuilder.Len() > 0 {
 			completionTime := int(time.Since(startTime).Milliseconds())
-			if err := h.saveAssistantMessage(ctx, conversationID, responseBuilder.String(), req.Model, completionTime); err != nil {
+			
+			// Build metadata with Analysis
+			metadata := make(map[string]interface{})
+			if lastAnalysis != nil {
+				metadata["analysis"] = lastAnalysis
+			}
+
+			if err := h.saveAssistantMessage(ctx, conversationID, responseBuilder.String(), req.Model, completionTime, metadata); err != nil {
 				h.logError("Failed to save assistant message", err)
 				// Don't fail the request
 			}
@@ -282,13 +297,17 @@ func (h *PhraseSenseiRouter) saveUserMessage(ctx context.Context, conversationID
 }
 
 // saveAssistantMessage saves the assistant's response to the database
-func (h *PhraseSenseiRouter) saveAssistantMessage(ctx context.Context, conversationID uuid.UUID, content string, model string, completionTimeMs int) error {
+func (h *PhraseSenseiRouter) saveAssistantMessage(ctx context.Context, conversationID uuid.UUID, content string, model string, completionTimeMs int, metadata map[string]interface{}) error {
+	if metadata == nil {
+		metadata = make(map[string]interface{})
+	}
+	
 	_, err := h.config.ChatHistoryRepo.CreateMessage(ctx, repository.CreateMessageParams{
 		ConversationID:   conversationID,
 		Role:             repository.MessageRoleAssistant,
 		Content:          content,
 		Model:            &model,
-		Metadata:         make(map[string]interface{}),
+		Metadata:         metadata,
 		CompletionTimeMs: &completionTimeMs,
 	})
 	return err

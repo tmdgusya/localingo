@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,6 +14,7 @@ import (
 	"github.com/tmdgusya/localingo/internal/tui/components/chatview"
 	"github.com/tmdgusya/localingo/internal/tui/components/history"
 	"github.com/tmdgusya/localingo/internal/tui/components/input"
+	"github.com/tmdgusya/localingo/internal/tui/components/report"
 	"github.com/tmdgusya/localingo/internal/tui/style"
 )
 
@@ -22,6 +24,7 @@ type ViewState int
 const (
 	ViewChat ViewState = iota
 	ViewHistory
+	ViewReport
 )
 
 type TuiModel struct {
@@ -37,6 +40,7 @@ type TuiModel struct {
 	chatInput   input.Model
 	chatView    chatview.Model
 	historyView history.Model
+	reportView  report.Model
 
 	// Layout
 	width  int
@@ -53,6 +57,7 @@ func NewModel(a *agent.PhraseSenseiAgent, r repository.ChatHistoryRepository, de
 		chatInput:    input.New(),
 		chatView:     chatview.New(),
 		historyView:  history.New(r),
+		reportView:   report.New(r),
 	}
 }
 
@@ -61,6 +66,7 @@ func (m *TuiModel) Init() tea.Cmd {
 		m.chatInput.Init(),
 		m.chatView.Init(),
 		m.historyView.Init(),
+		m.reportView.Init(),
 	)
 }
 
@@ -77,7 +83,7 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		// We can add Esc to go back from History to Chat if needed
 		case tea.KeyEsc:
-			if m.viewState == ViewHistory {
+			if m.viewState == ViewHistory || m.viewState == ViewReport {
 				m.viewState = ViewChat
 				return m, nil
 			}
@@ -89,6 +95,11 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.layout(msg.Width, msg.Height)
+
+		// Propagate to all views to ensure they are ready
+		_, hCmd := m.historyView.Update(msg)
+		_, rCmd := m.reportView.Update(msg)
+		cmds = append(cmds, hCmd, rCmd)
 
 	// --- Command & Input Handling ---
 	case input.SendRequestedMsg:
@@ -104,6 +115,7 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// --- Conversation Creation Handling ---
 	case conversationCreatedMsg:
 		m.conversationID = msg.id
+		log.Printf("Conversation initialized with ID: %s. Triggering pending actions.", msg.id)
 		// Now that we have an ID, save the pending message and trigger agent
 		return m, tea.Batch(
 			m.saveMessageCmd(msg.id, "user", msg.firstMessage),
@@ -112,12 +124,14 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// --- History Selection Handling ---
 	case history.ConversationSelectedMsg:
+		log.Printf("Conversation selected: %s", msg.ID)
 		m.conversationID = msg.ID
 		m.viewState = ViewChat
-		m.chatView.Clear() // Implement Clear in chatview
+		m.chatView.Clear()
 		return m, m.loadConversationMessages(msg.ID)
 
 	case messagesLoadedMsg:
+		log.Printf("Loaded %d messages for conversation", len(msg.messages))
 		// Populate chat view
 		for _, msg := range msg.messages {
 			m.chatView.AddMessage(string(msg.Role), msg.Content)
@@ -126,13 +140,22 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// --- Agent Response Handling ---
 	case responseMsg:
+		log.Printf("Received agent response. Saving to DB? (ID: %s, Repo: %v)", m.conversationID, m.repo != nil)
 		m.chatView.AddMessage("sensei", msg.text)
+		
 		// Save assistant response
 		if m.conversationID != uuid.Nil && m.repo != nil {
-			cmds = append(cmds, m.saveMessageCmd(m.conversationID, "assistant", msg.text))
+			var metadata map[string]interface{}
+			if msg.analysis != nil {
+				metadata = make(map[string]interface{})
+				metadata["analysis"] = msg.analysis
+				log.Println("Analysis data found, saving to metadata")
+			}
+			cmds = append(cmds, m.saveMessageCmd(m.conversationID, "assistant", msg.text, metadata))
+		} else {
+			log.Println("Skipping DB save: ConversationID is nil or Repo is nil")
 		}
-		return m, nil
-
+		return m, tea.Batch(cmds...)
 	case errorMsg:
 		m.err = msg.err
 		m.chatView.AddMessage("sensei", fmtError(msg.err))
@@ -158,6 +181,12 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		hModel, cmd = m.historyView.Update(msg)
 		m.historyView = hModel.(history.Model)
 		cmds = append(cmds, cmd)
+
+	case ViewReport:
+		var rModel tea.Model
+		rModel, cmd = m.reportView.Update(msg)
+		m.reportView = rModel.(report.Model)
+		cmds = append(cmds, cmd)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -171,6 +200,8 @@ func (m *TuiModel) View() string {
 	switch m.viewState {
 	case ViewHistory:
 		return m.historyView.View()
+	case ViewReport:
+		return m.reportView.View()
 	default:
 		return lipgloss.JoinVertical(
 			lipgloss.Left,
@@ -191,6 +222,9 @@ func (m *TuiModel) layout(width, height int) {
 
 	// Update History Layout
 	m.historyView.SetSize(width, height)
+
+	// Update Report Layout
+	// Handled via propagation or explicit set
 }
 
 func (m *TuiModel) handleCommand(text string) tea.Cmd {
@@ -201,6 +235,9 @@ func (m *TuiModel) handleCommand(text string) tea.Cmd {
 	case "/history":
 		m.viewState = ViewHistory
 		return m.historyView.LoadConversations()
+	case "/report":
+		m.viewState = ViewReport
+		return m.reportView.LoadStats()
 	case "/new":
 		m.conversationID = uuid.Nil
 		m.chatView.Clear() // Need to implement Clear
@@ -218,11 +255,11 @@ func (m *TuiModel) handleUserMessage(text string) tea.Cmd {
 
 	var cmds []tea.Cmd
 
-	// 1. Create Conversation if needed (Optimistic UI: do it in background or blocking?)
-	// For simplicity in TUI, we might want to do it before triggering agent
+	// 1. Create Conversation if needed
 	if m.conversationID == uuid.Nil && m.repo != nil {
+		log.Println("Starting new conversation creation...")
 		// We need to create a conversation first.
-		// NOTE: This should ideally be a Msg flow, but for simplicity we wrap in a Cmd
+		// We DO NOT trigger sendMessage here. We wait for conversationCreatedMsg.
 		cmds = append(cmds, func() tea.Msg {
 			ctx := context.Background()
 			// Create conversation
@@ -234,22 +271,23 @@ func (m *TuiModel) handleUserMessage(text string) tea.Cmd {
 				Title: &title,
 			})
 			if err != nil {
+				log.Printf("Error creating conversation: %v", err)
 				return errorMsg{err}
 			}
-			
-			// We need to update the model's conversationID. 
-			// But we can't update model from Cmd. We must return a Msg.
+			log.Printf("Conversation created: %s", conv.ID)
 			return conversationCreatedMsg{id: conv.ID, firstMessage: text}
 		})
 		return tea.Batch(cmds...)
 	}
 
-	// 2. Save User Message
+	// 2. Existing Conversation Flow
 	if m.conversationID != uuid.Nil && m.repo != nil {
+		log.Printf("Saving user message to conversation %s", m.conversationID)
 		cmds = append(cmds, m.saveMessageCmd(m.conversationID, "user", text))
 	}
 
-	// 3. Trigger Agent
+	// 3. Trigger Agent (Only if conversation exists, otherwise handled in conversationCreatedMsg)
+	log.Println("Triggering agent request...")
 	cmds = append(cmds, m.sendMessage(text))
 
 	return tea.Batch(cmds...)
@@ -280,9 +318,10 @@ func (m *TuiModel) loadConversationMessages(id uuid.UUID) tea.Cmd {
 	}
 }
 
-func (m *TuiModel) saveMessageCmd(convID uuid.UUID, role, content string) tea.Cmd {
+func (m *TuiModel) saveMessageCmd(convID uuid.UUID, role, content string, metadata ...map[string]interface{}) tea.Cmd {
 	return func() tea.Msg {
 		if m.repo == nil {
+			log.Println("Repo is nil, cannot save message")
 			return nil
 		}
 		ctx := context.Background()
@@ -293,18 +332,23 @@ func (m *TuiModel) saveMessageCmd(convID uuid.UUID, role, content string) tea.Cm
 		
 		model := m.defaultModel
 		
+		meta := make(map[string]interface{})
+		if len(metadata) > 0 && metadata[0] != nil {
+			meta = metadata[0]
+		}
+
 		_, err := m.repo.CreateMessage(ctx, repository.CreateMessageParams{
 			ConversationID: convID,
 			Role:           r,
 			Content:        content,
 			Model:          &model,
+			Metadata:       meta,
 		})
 		if err != nil {
-			// Log error or ignore? 
-			// return errorMsg{err} 
-			// Silent fail for history save for now to not interrupt chat
+			log.Printf("Failed to save message to DB: %v", err)
 			return nil
 		}
+		log.Printf("Message saved successfully (Role: %s)", role)
 		return nil
 	}
 }
@@ -317,19 +361,28 @@ func (m *TuiModel) sendMessage(text string) tea.Cmd {
 			Prompt: text,
 		}
 
-		resp, err := m.agent.Rephrase(ctx, req)
+		log.Println("Sending request to agent...")
+		// Use RephraseAndAnalyze which returns full structure including Analysis
+		resp, err := m.agent.RephraseAndAnalyze(ctx, req)
 		if err != nil {
+			log.Printf("Agent error: %v", err)
 			return errorMsg{err}
 		}
-		return responseMsg{text: resp.Text, done: true}
+		log.Println("Agent response received")
+		return responseMsg{
+			text:     resp.Text, 
+			done:     true,
+			analysis: resp.Analysis,
+		}
 	}
 }
 
 // --- Utils ---
 
 type responseMsg struct {
-	text string
-	done bool
+	text     string
+	done     bool
+	analysis *agent.Analysis
 }
 
 type errorMsg struct {

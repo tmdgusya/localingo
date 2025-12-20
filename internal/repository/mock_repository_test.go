@@ -19,6 +19,7 @@ type MockChatHistoryRepository struct {
 	DeleteMessageFunc             func(ctx context.Context, id uuid.UUID) error
 	WithTxFunc                    func(ctx context.Context, fn func(repo ChatHistoryRepository) error) error
 	PingFunc                      func(ctx context.Context) error
+	GetErrorStatsFunc             func(ctx context.Context) (*ErrorStats, error)
 }
 
 // CreateConversation mocks conversation creation
@@ -107,4 +108,12 @@ func (m *MockChatHistoryRepository) Ping(ctx context.Context) error {
 		return m.PingFunc(ctx)
 	}
 	return nil
+}
+
+// GetErrorStats mocks getting error statistics
+func (m *MockChatHistoryRepository) GetErrorStats(ctx context.Context) (*ErrorStats, error) {
+	if m.GetErrorStatsFunc != nil {
+		return m.GetErrorStatsFunc(ctx)
+	}
+	return &ErrorStats{CategoryCount: make(map[string]int)}, nil
 }

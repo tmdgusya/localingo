@@ -16,6 +16,7 @@ import (
 	"github.com/ollama/ollama/api"
 	"github.com/tmdgusya/localingo/internal/agent"
 	"github.com/tmdgusya/localingo/internal/config"
+	"github.com/tmdgusya/localingo/internal/prompt"
 	"github.com/tmdgusya/localingo/internal/repository"
 	"github.com/tmdgusya/localingo/internal/router"
 )
@@ -59,8 +60,14 @@ func main() {
 	ollamaAPIClient := api.NewClient(ollamaURL, http.DefaultClient)
 	ollamaClient := agent.NewOllamaClient(ollamaAPIClient)
 
+	// Initialize Prompt Manager
+	promptManager, err := prompt.NewManager()
+	if err != nil {
+		log.Fatalf("Failed to initialize prompt manager: %v", err)
+	}
+
 	// Initialize agent
-	phraseSenseiAgent := agent.NewPhraseSenseiAgent(ollamaClient)
+	phraseSenseiAgent := agent.NewPhraseSenseiAgent(ollamaClient, promptManager)
 
 	// Initialize router with chat history support
 	routerConfig := &router.RouterConfig{

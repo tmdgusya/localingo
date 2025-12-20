@@ -35,3 +35,27 @@ SELECT * FROM messages
 WHERE conversation_id = $1
 ORDER BY created_at DESC
 LIMIT 1;
+
+-- name: GetErrorCategoryStats :many
+SELECT 
+    category, 
+    count(*)::int as count
+FROM 
+    messages, 
+    jsonb_array_elements_text(metadata->'analysis'->'categories') as category
+WHERE 
+    role = 'assistant' 
+    AND metadata->'analysis' IS NOT NULL
+GROUP BY 
+    category
+ORDER BY 
+    count DESC;
+
+-- name: GetTotalAnalyzedMessages :one
+SELECT 
+    count(*)::int
+FROM 
+    messages
+WHERE 
+    role = 'assistant' 
+    AND metadata->'analysis' IS NOT NULL;

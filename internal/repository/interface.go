@@ -27,6 +27,15 @@ type ChatHistoryRepository interface {
 
 	// Healthcheck
 	Ping(ctx context.Context) error
+
+	// Analysis operations
+	GetErrorStats(ctx context.Context) (*ErrorStats, error)
+}
+
+// ErrorStats holds aggregated statistics about user errors
+type ErrorStats struct {
+	CategoryCount map[string]int
+	TotalAnalyzed int
 }
 
 // Conversation represents a chat conversation

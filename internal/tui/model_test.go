@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tmdgusya/localingo/internal/agent"
+	"github.com/tmdgusya/localingo/internal/prompt"
 	"github.com/tmdgusya/localingo/internal/repository"
 	"github.com/tmdgusya/localingo/internal/tui/components/input"
 )
@@ -19,6 +20,10 @@ type MockRepo struct {
 
 func (m *MockRepo) CreateMessage(ctx context.Context, params repository.CreateMessageParams) (*repository.Message, error) {
 	return &repository.Message{ID: uuid.New()}, nil
+}
+
+func (m *MockRepo) GetErrorStats(ctx context.Context) (*repository.ErrorStats, error) {
+	return &repository.ErrorStats{CategoryCount: make(map[string]int)}, nil
 }
 
 type MockLLMClient struct {
@@ -37,7 +42,10 @@ func (m *MockLLMClient) GenerateStream(ctx context.Context, req *agent.GenerateR
 func TestInitialModel(t *testing.T) {
 	mockRepo := &MockRepo{}
 	mockClient := &MockLLMClient{}
-	senseiAgent := agent.NewPhraseSenseiAgent(mockClient)
+	
+	// Use real prompt manager or mock
+	pm, _ := prompt.NewManager()
+	senseiAgent := agent.NewPhraseSenseiAgent(mockClient, pm)
 
 	m := NewModel(senseiAgent, mockRepo, "test-model")
 
@@ -55,7 +63,8 @@ func TestInitialModel(t *testing.T) {
 func TestMessageHandling(t *testing.T) {
 	mockRepo := &MockRepo{}
 	mockClient := &MockLLMClient{}
-	senseiAgent := agent.NewPhraseSenseiAgent(mockClient)
+	pm, _ := prompt.NewManager()
+	senseiAgent := agent.NewPhraseSenseiAgent(mockClient, pm)
 
 	m := NewModel(senseiAgent, mockRepo, "test-model")
 	
