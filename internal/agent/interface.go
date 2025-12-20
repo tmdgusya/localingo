@@ -6,5 +6,6 @@ import (
 
 // LLMClient is the interface for LLM operations
 type LLMClient interface {
-	Generate(ctx context.Context, prompt string) (string, error)
+	Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error)
+	GenerateStream(ctx context.Context, req *GenerateRequest, fn func(*GenerateResponse) error) error
 }

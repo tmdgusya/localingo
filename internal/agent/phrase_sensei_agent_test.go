@@ -18,10 +18,14 @@ func TestNewPhraseSenseiAgent(t *testing.T) {
 	}
 }
 
-func TestPhraseSenseiAgentWithMockResponse(t *testing.T) {
+func TestPhraseSenseiAgentRephrase(t *testing.T) {
+	expectedText := "This is a rephrased test phrase"
 	mockClient := &MockLLMClient{
-		GenerateFunc: func(ctx context.Context, prompt string) (string, error) {
-			return "This is a test phrase", nil
+		GenerateFunc: func(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
+			return &GenerateResponse{
+				Text: expectedText,
+				Done: true,
+			}, nil
 		},
 	}
 
@@ -31,13 +35,57 @@ func TestPhraseSenseiAgentWithMockResponse(t *testing.T) {
 		t.Fatal("Expected agent to be non-nil")
 	}
 
-	// client가 제대로 동작하는지 테스트
-	response, err := agent.client.Generate(context.Background(), "test prompt")
+	// Test the Rephrase method
+	req := &GenerateRequest{
+		Model:  "test-model",
+		Prompt: "test prompt",
+	}
+
+	resp, err := agent.Rephrase(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	if response != "This is a test phrase" {
-		t.Fatalf("Expected 'This is a test phrase', got '%s'", response)
+	if resp.Text != expectedText {
+		t.Fatalf("Expected '%s', got '%s'", expectedText, resp.Text)
+	}
+
+	if !resp.Done {
+		t.Fatal("Expected Done to be true")
+	}
+}
+
+func TestPhraseSenseiAgentRephraseStream(t *testing.T) {
+	expectedText := "This is a streamed rephrased test phrase"
+	var capturedResponse string
+
+	mockClient := &MockLLMClient{
+		GenerateStreamFunc: func(ctx context.Context, req *GenerateRequest, fn func(*GenerateResponse) error) error {
+			return fn(&GenerateResponse{
+				Text: expectedText,
+				Done: true,
+			})
+		},
+	}
+
+	agent := NewPhraseSenseiAgent(mockClient)
+
+	// Test the RephraseStream method
+	req := &GenerateRequest{
+		Model:  "test-model",
+		Prompt: "test prompt",
+	}
+
+	err := agent.RephraseStream(context.Background(), req, func(resp *GenerateResponse) error {
+		capturedResponse = resp.Text
+		return nil
+	})
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if capturedResponse != expectedText {
+		t.Fatalf("Expected '%s', got '%s'", expectedText, capturedResponse)
 	}
 }
