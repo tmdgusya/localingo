@@ -5,11 +5,21 @@ import (
 	"strings"
 )
 
+// CorrectionLevel defines the strictness of the rephrasing
+type CorrectionLevel string
+
+const (
+	LevelGentle   CorrectionLevel = "gentle"
+	LevelStandard CorrectionLevel = "standard"
+	LevelStrict   CorrectionLevel = "strict"
+)
+
 // GenerateRequest represents a request to generate text from an LLM
 type GenerateRequest struct {
 	Model  string
 	Prompt string
 	System string
+	Level  CorrectionLevel // Optional strictness level
 }
 
 // Analysis represents the linguistic analysis of the user's input

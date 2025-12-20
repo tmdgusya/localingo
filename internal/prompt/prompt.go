@@ -23,8 +23,14 @@ func NewManager() (*Manager, error) {
 		templates: make(map[string]*template.Template),
 	}
 
-	// Load default template
-	if err := m.loadTemplate("default_analyze", "templates/default_analyze.txt"); err != nil {
+	// Load rephrase templates
+	if err := m.loadTemplate("rephrase_gentle", "templates/rephrase_gentle.txt"); err != nil {
+		return nil, err
+	}
+	if err := m.loadTemplate("rephrase_standard", "templates/rephrase_standard.txt"); err != nil {
+		return nil, err
+	}
+	if err := m.loadTemplate("rephrase_strict", "templates/rephrase_strict.txt"); err != nil {
 		return nil, err
 	}
 

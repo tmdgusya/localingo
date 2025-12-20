@@ -24,7 +24,12 @@ func NewPhraseSenseiAgent(client LLMClient, pm *prompt.Manager) *PhraseSenseiAge
 // It uses the configured prompt template to enforce JSON output.
 func (a *PhraseSenseiAgent) RephraseAndAnalyze(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
 	// 1. Prepare Prompt
-	templateName := "default_analyze"
+	templateName := "rephrase_standard" // default
+	if req.Level == LevelGentle {
+		templateName = "rephrase_gentle"
+	} else if req.Level == LevelStrict {
+		templateName = "rephrase_strict"
+	}
 	
 	promptText, err := a.promptManager.Execute(templateName, map[string]string{
 		"Input": req.Prompt,

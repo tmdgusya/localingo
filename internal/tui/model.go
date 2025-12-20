@@ -39,8 +39,9 @@ type TuiModel struct {
 	defaultModel string
 
 	// State
-	viewState      ViewState
-	conversationID uuid.UUID // Current active conversation
+	viewState       ViewState
+	conversationID  uuid.UUID
+	correctionLevel agent.CorrectionLevel // Current correction level
 
 	// Child Components
 	chatInput   input.Model
@@ -59,12 +60,13 @@ type TuiModel struct {
 
 func NewModel(a *agent.PhraseSenseiAgent, r repository.ChatHistoryRepository, defaultModel string) tea.Model {
 	return &TuiModel{
-		agent:        a,
-		repo:         r,
-		defaultModel: defaultModel,
-		viewState:    ViewChat,
-		chatInput:    input.New(),
-		chatView:     chatview.New(),
+		agent:           a,
+		repo:            r,
+		defaultModel:    defaultModel,
+		viewState:       ViewChat,
+		correctionLevel: agent.LevelStandard, // Default level
+		chatInput:       input.New(),
+		chatView:        chatview.New(),
 		historyView:  history.New(r),
 		reportView:   report.New(r),
 		lessonView:   lesson.New(),
@@ -127,6 +129,7 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.handleCommand(text)
 		} else {
 			// Handle Chat Message
+			m.helperView.SetThinking(true)
 			return m, m.handleUserMessage(text)
 		}
 
@@ -159,12 +162,14 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case lessonLoadedMsg:
 		log.Println("Personalized lesson generated")
 		m.lessonView.SetContent(msg.content)
+		m.helperView.SetThinking(false)
 		return m, nil
 
 	// --- Agent Response Handling ---
 	case responseMsg:
 		log.Printf("Received agent response. Saving to DB? (ID: %s, Repo: %v)", m.conversationID, m.repo != nil)
 		m.chatView.AddMessage("sensei", msg.text)
+		m.helperView.SetThinking(false)
 		
 		// Save assistant response
 		if m.conversationID != uuid.Nil && m.repo != nil {
@@ -182,6 +187,7 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errorMsg:
 		m.err = msg.err
 		m.chatView.AddMessage("sensei", fmtError(msg.err))
+		m.helperView.SetThinking(false)
 		return m, nil
 	}
 
@@ -295,10 +301,30 @@ func (m *TuiModel) handleCommand(text string) tea.Cmd {
 	case "/lesson":
 		m.viewState = ViewLesson
 		m.lessonView.SetLoading(true)
+		m.helperView.SetThinking(true)
 		return m.generateLessonCmd()
 	case "/review":
 		m.viewState = ViewReview
 		return m.reviewView.LoadReviewPairs()
+	case "/level":
+		if len(parts) > 1 {
+			switch parts[1] {
+			case "1", "gentle":
+				m.correctionLevel = agent.LevelGentle
+				m.chatView.AddMessage("sensei", style.Base.Foreground(style.ColorSecondary).Render("Correction level set to: Gentle (Coach Mode)"))
+			case "2", "standard":
+				m.correctionLevel = agent.LevelStandard
+				m.chatView.AddMessage("sensei", style.Base.Foreground(style.ColorSecondary).Render("Correction level set to: Standard (Sensei Mode)"))
+			case "3", "strict":
+				m.correctionLevel = agent.LevelStrict
+				m.chatView.AddMessage("sensei", style.Base.Foreground(style.ColorSecondary).Render("Correction level set to: Strict (Editor Mode)"))
+			default:
+				m.chatView.AddMessage("sensei", style.Base.Foreground(style.ColorError).Render("Invalid level. Use 1 (Gentle), 2 (Standard), or 3 (Strict)."))
+			}
+		} else {
+			m.chatView.AddMessage("sensei", style.Base.Foreground(style.ColorText).Render(fmt.Sprintf("Current Correction Level: %s", m.correctionLevel)))
+		}
+		return nil
 	case "/new":
 		m.conversationID = uuid.Nil
 		m.chatView.Clear() // Need to implement Clear
@@ -464,6 +490,7 @@ func (m *TuiModel) sendMessage(text string) tea.Cmd {
 		req := &agent.GenerateRequest{
 			Model:  m.defaultModel,
 			Prompt: text,
+			Level:  m.correctionLevel,
 		}
 
 		log.Println("Sending request to agent...")
