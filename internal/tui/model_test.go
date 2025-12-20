@@ -30,6 +30,14 @@ func (m *MockRepo) GetCorrectionPairs(ctx context.Context, limit int) ([]reposit
 	return []repository.CorrectionPair{}, nil
 }
 
+func (m *MockRepo) GetDueReviewPairs(ctx context.Context, limit int) ([]repository.CorrectionPair, error) {
+	return []repository.CorrectionPair{}, nil
+}
+
+func (m *MockRepo) UpdateSRSStatus(ctx context.Context, id uuid.UUID, grade int) error {
+	return nil
+}
+
 type MockLLMClient struct {
 	generateStreamFunc func(ctx context.Context, req *agent.GenerateRequest, fn func(*agent.GenerateResponse) error) error
 }

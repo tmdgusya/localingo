@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tmdgusya/localingo/internal/repository/db"
+	"github.com/tmdgusya/localingo/internal/srs"
 )
 
 // PostgresRepository implements ChatHistoryRepository using PostgreSQL
@@ -310,6 +311,7 @@ func (r *PostgresRepository) GetCorrectionPairs(ctx context.Context, limit int) 
 			WHERE role = 'user'
 		)
 		SELECT 
+			a.id,
 			u.content as original,
 			a.content as corrected,
 			a.metadata->'analysis' as analysis
@@ -332,13 +334,107 @@ func (r *PostgresRepository) GetCorrectionPairs(ctx context.Context, limit int) 
 	var pairs []CorrectionPair
 	for rows.Next() {
 		var p CorrectionPair
-		if err := rows.Scan(&p.Original, &p.Corrected, &p.Analysis); err != nil {
+		if err := rows.Scan(&p.ID, &p.Original, &p.Corrected, &p.Analysis); err != nil {
 			return nil, WrapDBError(err)
 		}
 		pairs = append(pairs, p)
 	}
 
 	return pairs, nil
+}
+
+// GetDueReviewPairs retrieves correction pairs that are due for review or new
+func (r *PostgresRepository) GetDueReviewPairs(ctx context.Context, limit int) ([]CorrectionPair, error) {
+	query := `
+		WITH assistant_msgs AS (
+			SELECT id, conversation_id, created_at, content, metadata
+			FROM messages
+			WHERE role = 'assistant' 
+			AND metadata->'analysis' IS NOT NULL
+			AND (
+				metadata->'srs' IS NULL 
+				OR (metadata->'srs'->>'due_date')::timestamp <= NOW()
+			)
+		),
+		user_msgs AS (
+			SELECT id, conversation_id, created_at, content
+			FROM messages
+			WHERE role = 'user'
+		)
+		SELECT 
+			a.id,
+			u.content as original,
+			a.content as corrected,
+			a.metadata->'analysis' as analysis
+		FROM assistant_msgs a
+		JOIN LATERAL (
+			SELECT content FROM user_msgs u 
+			WHERE u.conversation_id = a.conversation_id 
+			AND u.created_at < a.created_at 
+			ORDER BY u.created_at DESC LIMIT 1
+		) u ON true
+		ORDER BY a.created_at ASC -- Oldest due first (or random?)
+		LIMIT $1`
+
+	rows, err := r.pool.Query(ctx, query, limit)
+	if err != nil {
+		return nil, WrapDBError(err)
+	}
+	defer rows.Close()
+
+	var pairs []CorrectionPair
+	for rows.Next() {
+		var p CorrectionPair
+		if err := rows.Scan(&p.ID, &p.Original, &p.Corrected, &p.Analysis); err != nil {
+			return nil, WrapDBError(err)
+		}
+		pairs = append(pairs, p)
+	}
+
+	return pairs, nil
+}
+
+// UpdateSRSStatus updates the SRS state for a message based on grade
+func (r *PostgresRepository) UpdateSRSStatus(ctx context.Context, id uuid.UUID, grade int) error {
+	pgUUID := pgtype.UUID{}
+	if err := pgUUID.Scan(id.String()); err != nil {
+		return fmt.Errorf("invalid UUID: %w", err)
+	}
+
+	// 1. Fetch current metadata
+	var metadataJSON []byte
+	err := r.pool.QueryRow(ctx, "SELECT metadata FROM messages WHERE id = $1", pgUUID).Scan(&metadataJSON)
+	if err != nil {
+		return WrapDBError(err)
+	}
+
+	var metadata map[string]interface{}
+	if err := json.Unmarshal(metadataJSON, &metadata); err != nil {
+		return fmt.Errorf("failed to unmarshal metadata: %w", err)
+	}
+
+	// 2. Parse current SRS state (or create new)
+	var currentItem srs.Item
+	if srsData, ok := metadata["srs"]; ok {
+		srsJSON, _ := json.Marshal(srsData)
+		_ = json.Unmarshal(srsJSON, &currentItem)
+	} else {
+		currentItem = srs.NewItem()
+	}
+
+	// 3. Calculate next state
+	newItem := currentItem.CalculateNextReview(srs.Grade(grade))
+
+	// 4. Update metadata
+	metadata["srs"] = newItem
+	newMetadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal new metadata: %w", err)
+	}
+
+	// 5. Save back to DB
+	_, err = r.pool.Exec(ctx, "UPDATE messages SET metadata = $1 WHERE id = $2", newMetadataJSON, pgUUID)
+	return WrapDBError(err)
 }
 
 // Helper functions to convert between DB and domain types

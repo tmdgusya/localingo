@@ -21,6 +21,8 @@ type MockChatHistoryRepository struct {
 	PingFunc                      func(ctx context.Context) error
 	GetErrorStatsFunc             func(ctx context.Context) (*ErrorStats, error)
 	GetCorrectionPairsFunc        func(ctx context.Context, limit int) ([]CorrectionPair, error)
+	GetDueReviewPairsFunc         func(ctx context.Context, limit int) ([]CorrectionPair, error)
+	UpdateSRSStatusFunc           func(ctx context.Context, id uuid.UUID, grade int) error
 }
 
 // CreateConversation mocks conversation creation
@@ -125,4 +127,20 @@ func (m *MockChatHistoryRepository) GetCorrectionPairs(ctx context.Context, limi
 		return m.GetCorrectionPairsFunc(ctx, limit)
 	}
 	return []CorrectionPair{}, nil
+}
+
+// GetDueReviewPairs mocks getting due review pairs
+func (m *MockChatHistoryRepository) GetDueReviewPairs(ctx context.Context, limit int) ([]CorrectionPair, error) {
+	if m.GetDueReviewPairsFunc != nil {
+		return m.GetDueReviewPairsFunc(ctx, limit)
+	}
+	return []CorrectionPair{}, nil
+}
+
+// UpdateSRSStatus mocks updating SRS status
+func (m *MockChatHistoryRepository) UpdateSRSStatus(ctx context.Context, id uuid.UUID, grade int) error {
+	if m.UpdateSRSStatusFunc != nil {
+		return m.UpdateSRSStatusFunc(ctx, id, grade)
+	}
+	return nil
 }

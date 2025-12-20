@@ -18,6 +18,7 @@ var commands = []Command{
 	{"/history", "View past conversations"},
 	{"/report",  "Analyze linguistic patterns"},
 	{"/lesson",  "Get a personalized English lesson"},
+	{"/review",  "Quiz yourself on past mistakes"},
 	{"/new",     "Start a fresh conversation"},
 	{"/quit",    "Exit the application"},
 }

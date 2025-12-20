@@ -25,26 +25,32 @@ Our system reflects this dual nature:
 
 1.  **The Brain (LLM & Prompt Engineering):**
     -   Uses **Chain-of-Thought** prompting to act as an analyst first, then a tutor.
-    -   Outputs **Structured Data (JSON)**, not just text, ensuring every conversation yields actionable metadata.
+    -   Outputs **Structured Data (JSON)**, ensuring every conversation yields actionable metadata.
+    -   **Meta-Analysis:** Can digest multiple past interactions to find high-level patterns.
 
-2.  **The Memory (PostgreSQL & Vector Store):**
-    -   Stores not just the conversation history, but the **Analysis Metadata**.
-    -   Allows for longitudinal studies of user progress.
+2.  **The Memory (PostgreSQL & SRS):**
+    -   Stores conversation history and **Analysis Metadata**.
+    -   **Spaced Repetition System (SRS):** Implements the **SM-2 algorithm** to track the "forgetting curve" of specific user mistakes.
+    -   Data is structured as `CorrectionPair` (Original vs. Corrected) for targeted training.
 
 3.  **The Interface (TUI):**
     -   A distraction-free, terminal-based environment for focused learning.
-    -   Provides real-time "Analyst Reports" alongside chat.
+    -   **Command Center:** Real-time hints and discovery via the `/` command bar.
+    -   **Multi-Modal Views:** Seamlessly switches between Chat, History, Analysis Report, Lessons, and Review Quizzes.
 
-## 3. Current Implementation Status (Pattern Analyst Feature)
+## 3. Current Implementation Status (The Complete Learning Cycle)
 
 ### ✅ Completed
--   **Prompt Management:** Externalized prompts (`internal/prompt`) to decouple logic from pedagogy.
--   **Structured Agent:** The Agent returns `Analysis` objects (Categories, Explanations) along with rephrased text.
--   **Strict JSON Enforcement:** Prompts are designed to force the LLM into a data-entry mode.
--   **Persistence:** Saving the `Analysis` JSON into the PostgreSQL `messages.metadata` column.
--   **Reporting:** Visualizing these insights in the TUI via the `/report` command.
--   **Command System:** Robust TUI navigation using `/history`, `/report`, and `/new`.
--   **Observability:** Integrated file logging (`debug.log`) to monitor "The Heart's" rhythm.
+-   **Prompt Management:** Externalized templates for flexible pedagogy.
+-   **Structured Agent:** Real-time tagging of Grammar, Vocabulary, and Naturalness.
+-   **Pattern Analyst (`/report`):** Quantitative visualization of recurring error categories.
+-   **Private Tutor (`/lesson`):** Qualitative meta-analysis of past mistakes to provide "Native Mindset" coaching.
+-   **Fossil Breaker (`/review`):** Active recall training using the SM-2 SRS algorithm to break bad habits.
+-   **UX & Guidance:** Real-time command hints and auto-completion logic.
+-   **Observability:** Robust file logging (`debug.log`) for system health monitoring.
+
+---
+*Localingo is not just a translation tool; it is a personalized language observatory and a scientific laboratory for habit-breaking.*
 
 ---
 *Localingo is not just a translation tool; it is a personalized language observatory.*

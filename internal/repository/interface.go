@@ -31,10 +31,15 @@ type ChatHistoryRepository interface {
 	// Analysis operations
 	GetErrorStats(ctx context.Context) (*ErrorStats, error)
 	GetCorrectionPairs(ctx context.Context, limit int) ([]CorrectionPair, error)
+	
+	// SRS operations
+	GetDueReviewPairs(ctx context.Context, limit int) ([]CorrectionPair, error)
+	UpdateSRSStatus(ctx context.Context, id uuid.UUID, grade int) error
 }
 
 // CorrectionPair represents a user input and its correction
 type CorrectionPair struct {
+	ID        uuid.UUID // Message ID of the assistant's correction
 	Original  string
 	Corrected string
 	Analysis  []byte

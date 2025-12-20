@@ -18,6 +18,7 @@ import (
 	"github.com/tmdgusya/localingo/internal/tui/components/input"
 	"github.com/tmdgusya/localingo/internal/tui/components/lesson"
 	"github.com/tmdgusya/localingo/internal/tui/components/report"
+	"github.com/tmdgusya/localingo/internal/tui/components/review"
 	"github.com/tmdgusya/localingo/internal/tui/style"
 )
 
@@ -29,6 +30,7 @@ const (
 	ViewHistory
 	ViewReport
 	ViewLesson
+	ViewReview
 )
 
 type TuiModel struct {
@@ -47,6 +49,7 @@ type TuiModel struct {
 	reportView  report.Model
 	lessonView  lesson.Model
 	helperView  helper.Model
+	reviewView  review.Model
 
 	// Layout
 	width  int
@@ -66,6 +69,7 @@ func NewModel(a *agent.PhraseSenseiAgent, r repository.ChatHistoryRepository, de
 		reportView:   report.New(r),
 		lessonView:   lesson.New(),
 		helperView:   helper.New(),
+		reviewView:   review.New(r),
 	}
 }
 
@@ -77,6 +81,7 @@ func (m *TuiModel) Init() tea.Cmd {
 		m.reportView.Init(),
 		m.lessonView.Init(),
 		m.helperView.Init(),
+		m.reviewView.Init(),
 	)
 }
 
@@ -93,7 +98,7 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		// We can add Esc to go back from History to Chat if needed
 		case tea.KeyEsc:
-			if m.viewState == ViewHistory || m.viewState == ViewReport || m.viewState == ViewLesson {
+			if m.viewState == ViewHistory || m.viewState == ViewReport || m.viewState == ViewLesson || m.viewState == ViewReview {
 				m.viewState = ViewChat
 				return m, nil
 			}
@@ -111,7 +116,8 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		_, rCmd := m.reportView.Update(msg)
 		_, lCmd := m.lessonView.Update(msg)
 		_, hlpCmd := m.helperView.Update(msg)
-		cmds = append(cmds, hCmd, rCmd, lCmd, hlpCmd)
+		_, revCmd := m.reviewView.Update(msg)
+		cmds = append(cmds, hCmd, rCmd, lCmd, hlpCmd, revCmd)
 
 	// --- Command & Input Handling ---
 	case input.SendRequestedMsg:
@@ -218,6 +224,12 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lModel, cmd = m.lessonView.Update(msg)
 		m.lessonView = lModel.(lesson.Model)
 		cmds = append(cmds, cmd)
+
+	case ViewReview:
+		var revModel tea.Model
+		revModel, cmd = m.reviewView.Update(msg)
+		m.reviewView = revModel.(review.Model)
+		cmds = append(cmds, cmd)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -235,6 +247,8 @@ func (m *TuiModel) View() string {
 		return m.reportView.View()
 	case ViewLesson:
 		return m.lessonView.View()
+	case ViewReview:
+		return m.reviewView.View()
 	default:
 		return lipgloss.JoinVertical(
 			lipgloss.Left,
@@ -263,6 +277,8 @@ func (m *TuiModel) layout(width, height int) {
 
 	// Update Report Layout
 	// Handled via propagation or explicit set
+	
+	// Update Review Layout - handled via propagation (WindowSizeMsg)
 }
 
 func (m *TuiModel) handleCommand(text string) tea.Cmd {
@@ -280,6 +296,9 @@ func (m *TuiModel) handleCommand(text string) tea.Cmd {
 		m.viewState = ViewLesson
 		m.lessonView.SetLoading(true)
 		return m.generateLessonCmd()
+	case "/review":
+		m.viewState = ViewReview
+		return m.reviewView.LoadReviewPairs()
 	case "/new":
 		m.conversationID = uuid.Nil
 		m.chatView.Clear() // Need to implement Clear
